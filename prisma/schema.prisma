@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  events    Event[]
+}
+
+model Event {
+  id                String    @id @default(uuid())
+  title             String
+  description       String?
+  eventType         String
+  budget            Float
+  attendeeCount     Int
+  location          String?
+  district          String?
+  startDate         DateTime?
+  endDate           DateTime?
+  specialRequests   String?
+  status            EventStatus @default(PLANNING)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  userId            String
+  user              User       @relation(fields: [userId], references: [id])
+  vendorSelections  VendorSelection[]
+}
+
+model Vendor {
+  id              String    @id @default(uuid())
+  name            String
+  description     String?
+  contactEmail    String?
+  contactPhone    String?
+  serviceType     String
+  priceRange      String?
+  rating          Float?
+  location        String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  selections      VendorSelection[]
+}
+
+model VendorSelection {
+  id              String    @id @default(uuid())
+  eventId         String
+  vendorId        String
+  status          SelectionStatus @default(PENDING)
+  proposedPrice   Float?
+  finalPrice      Float?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  event           Event     @relation(fields: [eventId], references: [id])
+  vendor          Vendor    @relation(fields: [vendorId], references: [id])
+
+  @@unique([eventId, vendorId])
+}
+
+enum EventStatus {
+  PLANNING
+  VENDOR_SELECTION
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SelectionStatus {
+  PENDING
+  CONTACTED
+  NEGOTIATING
+  CONFIRMED
+  REJECTED
+}
