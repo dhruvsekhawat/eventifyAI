@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronLeft,
 } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 
 interface EventSetupProps {
   onComplete: () => void
@@ -15,6 +16,7 @@ interface EventSetupProps {
 export function EventSetup({ onComplete }: EventSetupProps) {
   const [step, setStep] = useState(0)
   const [progress, setProgress] = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const totalSteps = 7
 
   // Form state
@@ -26,12 +28,80 @@ export function EventSetup({ onComplete }: EventSetupProps) {
   const [selectedVibes, setSelectedVibes] = useState<string[]>([])
   const [selectedDietary, setSelectedDietary] = useState<string[]>([])
 
-  const nextStep = () => {
-    if (step < totalSteps) {
+  const nextStep = async () => {
+    if (step < totalSteps - 1) {
       setStep(step + 1)
       setProgress(((step + 1) / totalSteps) * 100)
     } else {
+      // Final step - save event to database
+      await saveEvent()
+    }
+  }
+
+  const saveEvent = async () => {
+    setIsSubmitting(true)
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        throw new Error('User not authenticated')
+      }
+
+      // Create event data
+      const eventData = {
+        user_id: user.id,
+        title: `${eventType} Event`,
+        description: `A ${eventType.toLowerCase()} event in ${eventCity} with ${guestCount} guests. Budget: $${budget.toLocaleString()}. Vibe: ${selectedVibes.join(', ')}. Dietary considerations: ${selectedDietary.join(', ')}`,
+        event_type: eventType,
+        event_date: eventDate,
+        location: eventCity,
+        budget: budget,
+        guest_count: guestCount,
+        status: 'planning',
+        summary: `Planning a ${eventType.toLowerCase()} event for ${guestCount} guests in ${eventCity} with a budget of $${budget.toLocaleString()}.`
+      }
+
+      // Insert event into database
+      const { data: event, error } = await supabase
+        .from('events')
+        .insert([eventData])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error saving event:', error)
+        throw error
+      }
+
+      // Add event to voice agent queue for vendor sourcing
+      await supabase
+        .from('voice_agent_queue')
+        .insert([{
+          event_id: event.id,
+          status: 'pending',
+          priority: 1,
+          data: {
+            event_type: eventType,
+            location: eventCity,
+            guest_count: guestCount,
+            budget: budget,
+            vibes: selectedVibes,
+            dietary: selectedDietary
+          }
+        }])
+
+      console.log('Event saved successfully:', event)
+      
+      // Complete the onboarding
       onComplete()
+      
+    } catch (error) {
+      console.error('Error saving event:', error)
+      // Still complete onboarding even if there's an error
+      onComplete()
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -414,7 +484,7 @@ export function EventSetup({ onComplete }: EventSetupProps) {
         </button>
       </div>
       <div className="text-center">
-        <button onClick={onComplete} className="text-[#3B82F6] hover:underline">
+        <button onClick={saveEvent} className="text-[#3B82F6] hover:underline">
           Skip this step
         </button>
       </div>
@@ -472,9 +542,19 @@ export function EventSetup({ onComplete }: EventSetupProps) {
             scale: 0.95,
           }}
           onClick={nextStep}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#CFFAFE] to-[#A7F3D0] text-[#0F172A] rounded-full"
+          disabled={isSubmitting}
+          className={`flex items-center gap-2 px-6 py-3 rounded-full ${
+            isSubmitting
+              ? 'opacity-50 cursor-not-allowed bg-[#F1F5F9] text-[#94A3B8]'
+              : 'bg-gradient-to-r from-[#CFFAFE] to-[#A7F3D0] text-[#0F172A]'
+          }`}
         >
-          {step < totalSteps - 1 ? (
+          {isSubmitting ? (
+            <>
+              <div className="w-4 h-4 border-2 border-[#0F172A] border-t-transparent rounded-full animate-spin"></div>
+              Saving...
+            </>
+          ) : step < totalSteps - 1 ? (
             <>
               Continue
               <ChevronRight size={18} />

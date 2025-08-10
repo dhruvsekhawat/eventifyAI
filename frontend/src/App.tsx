@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { AuthCard } from './components/AuthCard';
 import { Layout } from './components/layout/Layout';
@@ -11,11 +11,12 @@ import { Settings } from './pages/Settings';
 import { Onboarding } from './pages/Onboarding';
 import { LandingPage } from './components/LandingPage';
 
-export function App() {
+function AppContent() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [isNewUser, setIsNewUser] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Get initial session
@@ -58,6 +59,8 @@ export function App() {
 
   const handleOnboardingComplete = () => {
     setIsNewUser(false);
+    // Navigate to dashboard after onboarding is complete
+    navigate('/dashboard');
   };
 
   if (loading) {
@@ -76,67 +79,71 @@ export function App() {
   // Show onboarding for new users
   if (user && isNewUser) {
     return (
-      <Router>
-        <Routes>
-          <Route path="/onboarding" element={<Onboarding onComplete={handleOnboardingComplete} />} />
-          <Route path="*" element={<Navigate to="/onboarding" replace />} />
-        </Routes>
-      </Router>
+      <Routes>
+        <Route path="/onboarding" element={<Onboarding onComplete={handleOnboardingComplete} />} />
+        <Route path="*" element={<Navigate to="/onboarding" replace />} />
+      </Routes>
     );
   }
 
   // Show dashboard if user is authenticated and not new
   if (user) {
     return (
-      <Router>
-        <Routes>
-          <Route path="/onboarding" element={<Onboarding onComplete={handleOnboardingComplete} />} />
-          <Route
-            path="/dashboard"
-            element={
-              <Layout>
-                <Dashboard />
-              </Layout>
-            }
-          />
-          <Route
-            path="/vendors"
-            element={
-              <Layout>
-                <Vendors />
-              </Layout>
-            }
-          />
-          <Route
-            path="/guests"
-            element={
-              <Layout>
-                <Guests />
-              </Layout>
-            }
-          />
-          <Route
-            path="/payments"
-            element={
-              <Layout>
-                <Payments />
-              </Layout>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <Layout>
-                <Settings />
-              </Layout>
-            }
-          />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Router>
+      <Routes>
+        <Route path="/onboarding" element={<Onboarding onComplete={handleOnboardingComplete} />} />
+        <Route
+          path="/dashboard"
+          element={
+            <Layout>
+              <Dashboard />
+            </Layout>
+          }
+        />
+        <Route
+          path="/vendors"
+          element={
+            <Layout>
+              <Vendors />
+            </Layout>
+          }
+        />
+        <Route
+          path="/guests"
+          element={
+            <Layout>
+              <Guests />
+            </Layout>
+          }
+        />
+        <Route
+          path="/payments"
+          element={
+            <Layout>
+              <Payments />
+            </Layout>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <Layout>
+              <Settings />
+            </Layout>
+          }
+        />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
     );
   }
 
   // Show landing page if not authenticated
   return <LandingPage onGetStarted={handleGetStarted} />;
+}
+
+export function App() {
+  return (
+    <Router>
+      <AppContent />
+    </Router>
+  );
 }

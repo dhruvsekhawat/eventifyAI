@@ -114,6 +114,7 @@ export function VendorShortlist() {
             </button>
           ))}
         </div>
+
       </div>
       <div className="p-5 divide-y divide-[#E2E8F0]">
         {vendors[activeTab].map((vendor) => (
