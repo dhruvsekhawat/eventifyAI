@@ -1,4 +1,4 @@
-# 🏢 Bland AI Voice Service
+# 🏢 Bland AI Voice Service - Production Guide
 
 A production-ready Python service for automating venue inquiries using Bland AI's voice agents. Designed for backend integration with support for multiple concurrent calls.
 
@@ -227,6 +227,50 @@ def get_status(inquiry_id):
     return voice_api.get_inquiry_status(inquiry_id)
 ```
 
+### 3. Database Integration
+
+```python
+import sqlite3
+from api_interface import VoiceServiceAPI
+
+class VenueInquiryDB:
+    def __init__(self):
+        self.voice_api = VoiceServiceAPI()
+        self.db = sqlite3.connect('inquiries.db')
+        self.setup_tables()
+    
+    def create_inquiry(self, venue_data):
+        # Create voice inquiry
+        result = self.voice_api.create_venue_inquiry(**venue_data)
+        
+        if result["success"]:
+            # Store in database
+            cursor = self.db.cursor()
+            cursor.execute("""
+                INSERT INTO inquiries (inquiry_id, call_id, venue_name, status)
+                VALUES (?, ?, ?, ?)
+            """, (result["inquiry_id"], result["call_id"], 
+                  venue_data["venue_name"], result["status"]))
+            self.db.commit()
+        
+        return result
+    
+    def update_completed_inquiry(self, inquiry_id):
+        # Get completed inquiry
+        result = self.voice_api.get_inquiry_status(inquiry_id)
+        
+        if result["success"] and result["status"] == "completed":
+            # Update database
+            cursor = self.db.cursor()
+            cursor.execute("""
+                UPDATE inquiries 
+                SET status = ?, summary = ?, completed_at = ?
+                WHERE inquiry_id = ?
+            """, (result["status"], result["call_summary"], 
+                  result["completed_at"], inquiry_id))
+            self.db.commit()
+```
+
 ## 🚨 Error Handling
 
 ### Response Format
@@ -280,6 +324,22 @@ cleaned = voice_api.cleanup_old_inquiries(max_age_hours=24)
 stopped = voice_api.stop_all_inquiries()
 ```
 
+### Logging
+
+```python
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Service logs all operations
+logger = logging.getLogger(__name__)
+logger.info("Voice service initialized")
+```
+
 ## 🔒 Security Considerations
 
 1. **API Key Management**: Store API keys in environment variables, never in code
@@ -331,21 +391,6 @@ See `production_example.py` for comprehensive usage examples including:
 - Batch processing
 - Error handling
 - Async patterns
-
-## 📁 Project Structure
-
-```
-odyssey/
-├── voice_agent.py          # Core Bland AI integration
-├── voice_service.py        # Production voice service
-├── api_interface.py        # Clean API interface
-├── production_config.py    # Environment configuration
-├── production_example.py   # Usage examples
-├── requirements.txt        # Dependencies
-├── env_template.txt        # Environment template
-├── PRODUCTION_README.md    # Detailed production guide
-└── README.md              # This file
-```
 
 ## 🤝 Support
 
