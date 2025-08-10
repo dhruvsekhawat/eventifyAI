@@ -90,29 +90,38 @@ class VoiceService:
         self.lock = threading.Lock()
         self.executor = ThreadPoolExecutor(max_workers=max_concurrent_calls)
         
-        # Custom task template for venue inquiries
-        self.venue_inquiry_task = """Call {venue_name} to inquire about venue availability and pricing for {client_name}'s event.
+        # Custom task template for catering inquiries (NOT venue capacity)
+        self.venue_inquiry_task = """Call {venue_name} to ask about catering for {client_name}'s event. They need food for {guest_count} people on {event_date} with a budget around {budget_range}.
 
-Event Details:
-- Date: {event_date}
-- Guest Count: {guest_count} people
-- Event Type: {event_type}
-- Budget Range: {budget_range}
-- Special Requests: {special_requests}
+You are Maya, a friendly and professional event planner. Sound natural and conversational - don't be robotic. Ask questions like you're actually planning an event, not reading from a script.
 
-Required Information to Gather:
-1. Venue availability for the specified date
-2. Pricing and what's included (tables, chairs, AV, parking)
-3. Capacity and space details
-4. Restrictions (noise, alcohol, decorations, music)
-5. Additional fees and charges
-6. Catering options and dietary accommodations
-7. Booking process and deposit requirements
-8. Contact information for follow-up
+Start with: "Hi, this is Maya calling about catering for an upcoming event. Do you handle events of this size?"
 
-Tone: Professional, friendly, and business-focused. Be thorough in gathering all details and pricing information.
+Key things to find out about FOOD/CATERING ONLY:
+- What catering options do you have for {guest_count} people?
+- What's your per-person pricing and what's included in the food package?
+- Can you handle dietary restrictions (vegetarian, gluten-free, etc.)?
+- What menu options do you offer for corporate events?
+- Do you provide serving staff, setup, and delivery?
+- What's your lead time for food orders and cancellation policy?
+- Any additional fees for food service I should know about?
 
-If the venue meets requirements, express interest in proceeding with a tentative reservation pending client approval."""
+NEGOTIATION STRATEGY:
+When they give you pricing, remember this is a bulk food order for {guest_count} people. Politely ask about discounts:
+- "Since this is for {guest_count} people, do you offer any bulk discounts or corporate rates on catering?"
+- "That's a bit higher than our budget. For an order this size, could you work with us on the per-person food pricing?"
+- "We're also looking at a few other catering options. What's the best you can do for a group this large?"
+- "Is there any flexibility on the per-person rate for corporate catering events?"
+
+Example questions to ask naturally:
+- "What kind of menus do you offer for corporate events?"
+- "Does that price include plates, utensils, and serving staff?"
+- "How far in advance do you need the final food count?"
+- "What happens if we need to make changes to the food order?"
+
+Get their contact info and ask them to email a catering quote. Sound interested but not desperate - like you're comparing a few catering options.
+
+Take good notes and be polite. If they can't help with catering, thank them and move on. If they sound good, ask about next steps for placing the food order."""
 
     def _generate_task_from_request(self, request: VenueInquiryRequest) -> str:
         """Generate custom task from venue inquiry request"""
@@ -146,11 +155,26 @@ If the venue meets requirements, express interest in proceeding with a tentative
             # Generate task
             task = self._generate_task_from_request(request)
             
-            # Make the call
-            call_response = voice_agent.make_call_with_task(request.venue_phone, task)
+            # Get voice settings from config
+            try:
+                from config import VOICE_SETTINGS
+                voice_settings = VOICE_SETTINGS.copy()
+            except ImportError:
+                # Fallback to default voice settings
+                voice_settings = {
+                    "voice_id": "maya",
+                    "stability": 0.6,
+                    "similarity_boost": 0.8,
+                    "style": 0.2,
+                    "use_speaker_boost": True
+                }
             
-            if call_response.get("status") == "success":
-                call_id = call_response.get("call_id")
+            # Make the call with voice settings
+            call_response = voice_agent.make_call_with_task(request.venue_phone, task, voice_settings)
+            
+            # Bland AI returns call_id directly, not wrapped in status
+            if call_response.get("call_id") or call_response.get("id"):
+                call_id = call_response.get("call_id") or call_response.get("id")
                 
                 # Create response
                 response = VenueInquiryResponse(
@@ -179,6 +203,9 @@ If the venue meets requirements, express interest in proceeding with a tentative
                 
         except Exception as e:
             logger.error(f"Error initiating venue inquiry: {e}")
+            # Add more detailed error logging
+            if hasattr(e, '__cause__') and e.__cause__:
+                logger.error(f"Original error: {e.__cause__}")
             return VenueInquiryResponse(
                 inquiry_id=str(uuid.uuid4()),
                 call_id="",
@@ -209,6 +236,79 @@ If the venue meets requirements, express interest in proceeding with a tentative
                 return self.active_inquiries[inquiry_id]["response"]
         
         return None
+    
+    def update_inquiry_status(self, inquiry_id: str) -> Optional[VenueInquiryResponse]:
+        """
+        Update the status of an active inquiry by checking with Bland AI
+        
+        Args:
+            inquiry_id: Unique inquiry identifier
+            
+        Returns:
+            Updated VenueInquiryResponse or None if not found
+        """
+        with self.lock:
+            if inquiry_id not in self.active_inquiries:
+                return None
+            
+            inquiry_data = self.active_inquiries[inquiry_id]
+            voice_agent = inquiry_data["voice_agent"]
+            call_id = inquiry_data["response"].call_id
+            
+            try:
+                # Check call status with Bland AI
+                call_details = voice_agent.get_call_details(call_id)
+                status = call_details.get("status", "unknown")
+                
+                # Update the response status
+                inquiry_data["response"].status = status
+                
+                # If completed, move to completed inquiries
+                if status in ["completed", "failed", "no_answer", "busy", "timeout"]:
+                    # Parse call result
+                    call_result = voice_agent._parse_call_result(call_details)
+                    
+                    # If status is completed but summary is empty, wait briefly for summary generation
+                    if status == "completed" and not call_result.summary:
+                        time.sleep(5)  # Wait 5 seconds for summary generation
+                        try:
+                            updated_call_details = voice_agent.get_call_details(call_id)
+                            updated_call_result = voice_agent._parse_call_result(updated_call_details)
+                            if updated_call_result.summary:
+                                call_result = updated_call_result
+                        except Exception:
+                            pass  # Use original result if retry fails
+                    
+                    # Update response with call results
+                    response = inquiry_data["response"]
+                    response.call_summary = call_result.summary
+                    response.transcript = call_result.transcript
+                    response.extracted_quotes = call_result.quotes
+                    response.dietary_info = call_result.dietary_info
+                    response.next_steps = call_result.next_steps
+                    response.completed_at = time.strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    # Add call metadata
+                    response.call_metadata = {
+                        "duration": call_details.get("corrected_duration"),
+                        "cost": call_details.get("price"),
+                        "answered_by": call_details.get("answered_by"),
+                        "call_ended_by": call_details.get("call_ended_by"),
+                        "started_at": call_details.get("started_at"),
+                        "ended_at": call_details.get("end_at")
+                    }
+                    
+                    # Move to completed
+                    self.completed_inquiries[inquiry_id] = response
+                    del self.active_inquiries[inquiry_id]
+                    
+                    logger.info(f"Inquiry {inquiry_id} completed for {response.venue_name}")
+                
+                return inquiry_data["response"]
+                
+            except Exception as e:
+                logger.error(f"Error updating inquiry status: {e}")
+                return inquiry_data["response"]
 
     def wait_for_inquiry_completion(self, inquiry_id: str, timeout: int = 300) -> Optional[VenueInquiryResponse]:
         """

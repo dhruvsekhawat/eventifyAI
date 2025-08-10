@@ -73,15 +73,26 @@ class BlandVoiceAgent:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to initiate call with pathway: {str(e)}")
+            # Add detailed error debugging
+            error_msg = f"Failed to initiate call with pathway: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_body = e.response.text
+                    error_msg += f"\nError Body: {error_body}"
+                    error_msg += f"\nStatus Code: {e.response.status_code}"
+                    error_msg += f"\nRequest Payload: {json.dumps(payload, indent=2)}"
+                except Exception:
+                    pass
+            raise Exception(error_msg)
     
-    def make_call_with_task(self, phone_number: str, task: str) -> Dict:
+    def make_call_with_task(self, phone_number: str, task: str, voice_settings: Dict = None) -> Dict:
         """
         Initiate a call using Bland AI's task system.
         
         Args:
             phone_number: Target phone number (E.164 format recommended)
             task: Text prompt describing what the AI should do
+            voice_settings: Optional voice configuration (voice_id, stability, etc.)
             
         Returns:
             API response with call_id and status
@@ -89,15 +100,44 @@ class BlandVoiceAgent:
         endpoint = f"{self.base_url}/calls"
         payload = {
             "phone_number": phone_number,
-            "task": task
+            "task": task,
+            "record": True,  # Record the call for transcript
+            "wait": True,  # Wait for person to say hello before starting
+            "max_duration": 300  # Max call duration in seconds
         }
+        
+        # Add voice settings if provided
+        if voice_settings:
+            # Use the voice_id as the 'voice' parameter (Bland AI API requirement)
+            if "voice_id" in voice_settings:
+                payload["voice"] = voice_settings["voice_id"]
+            
+            # Add other voice parameters that Bland AI supports
+            if "stability" in voice_settings:
+                payload["stability"] = voice_settings["stability"]
+            if "similarity_boost" in voice_settings:
+                payload["similarity_boost"] = voice_settings["similarity_boost"]
+            if "style" in voice_settings:
+                payload["style"] = voice_settings["style"]
+            if "use_speaker_boost" in voice_settings:
+                payload["speaker_boost"] = voice_settings["use_speaker_boost"]
         
         try:
             response = requests.post(endpoint, headers=self.headers, json=payload)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to initiate call with task: {str(e)}")
+            # Add detailed error debugging
+            error_msg = f"Failed to initiate call with task: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_body = e.response.text
+                    error_msg += f"\nError Body: {error_body}"
+                    error_msg += f"\nStatus Code: {e.response.status_code}"
+                    error_msg += f"\nRequest Payload: {json.dumps(payload, indent=2)}"
+                except Exception:
+                    pass
+            raise Exception(error_msg)
     
     def make_call(self, phone_number: str, pathway_id: str = None, task: str = None) -> Dict:
         """
@@ -135,7 +175,16 @@ class BlandVoiceAgent:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to get call details: {str(e)}")
+            # Add detailed error debugging
+            error_msg = f"Failed to get call details: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_body = e.response.text
+                    error_msg += f"\nError Body: {error_body}"
+                    error_msg += f"\nStatus Code: {e.response.status_code}"
+                except Exception:
+                    pass
+            raise Exception(error_msg)
     
     def stop_call(self, call_id: str) -> Dict:
         """
@@ -154,7 +203,16 @@ class BlandVoiceAgent:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to stop call: {str(e)}")
+            # Add detailed error debugging
+            error_msg = f"Failed to stop call: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_body = e.response.text
+                    error_msg += f"\nError Body: {error_body}"
+                    error_msg += f"\nStatus Code: {e.response.status_code}"
+                except Exception:
+                    pass
+            raise Exception(error_msg)
     
     def wait_for_call_completion(self, call_id: str, timeout: int = 300, check_interval: int = 10) -> CallResult:
         """
@@ -219,6 +277,10 @@ class BlandVoiceAgent:
         
         # Get summary - API returns 'summary' field
         summary = call_details.get("summary", "")
+        
+        # Handle None summary (convert to empty string for consistency)
+        if summary is None:
+            summary = ""
         
         # Parse quotes if available (this would depend on your pathway setup)
         quotes = self._extract_quotes(transcript, summary)
@@ -498,13 +560,14 @@ def main():
         
         # Get summary
         summary = event_manager.get_inquiry_summary(call_id)
-        
+        '''
         print("Catering inquiry completed!")
         print(f"Call ID: {summary['call_id']}")
         print(f"Status: {summary['call_outcome']['status']}")
         print(f"Quotes received: {summary['call_outcome']['quotes']}")
         print(f"Dietary info: {summary['call_outcome']['dietary_info']}")
         print(f"Next steps: {summary['call_outcome']['next_steps']}")
+        '''
         
     except Exception as e:
         print(f"Error in catering inquiry: {e}")

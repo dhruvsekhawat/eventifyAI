@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any, Union
 from dataclasses import asdict
 
 from voice_service import VoiceService, VenueInquiryRequest, VenueInquiryResponse
-from production_config import get_config
+from config import API_KEY, VOICE_SETTINGS
 
 
 class VoiceServiceAPI:
@@ -28,12 +28,10 @@ class VoiceServiceAPI:
             max_concurrent_calls: Max concurrent calls (uses config if not provided)
         """
         if api_key is None:
-            config = get_config()
-            api_key = config.get_api_key()
+            api_key = API_KEY
         
         if max_concurrent_calls is None:
-            config = get_config()
-            max_concurrent_calls = config.MAX_CONCURRENT_CALLS
+            max_concurrent_calls = 10  # Default value
         
         self.service = VoiceService(api_key, max_concurrent_calls)
     

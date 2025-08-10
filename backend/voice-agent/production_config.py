@@ -11,7 +11,7 @@ class ProductionConfig:
     """Production configuration class"""
     
     # Bland AI Configuration
-    BLAND_AI_API_KEY: str = os.getenv("BLAND_AI_API_KEY", "")
+    BLAND_AI_API_KEY: str = os.getenv("BLAND_AI_API_KEY", "org_984e2aaad1993874b7806883c0d68e46ad3b717df99f90ede19b4f52b32bafbf03f6fae42cf12c024df569")
     BLAND_AI_BASE_URL: str = os.getenv("BLAND_AI_BASE_URL", "https://api.bland.ai/v1")
     
     # Service Configuration
