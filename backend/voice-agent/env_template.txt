@@ -1,0 +1,24 @@
+# Bland AI Voice Service Environment Configuration
+# Copy this content to a .env file and fill in your actual values
+
+# Bland AI Configuration
+BLAND_AI_API_KEY=your_actual_api_key_here
+
+# Environment Configuration
+ENVIRONMENT=development  # development, staging, production
+
+# Service Configuration
+MAX_CONCURRENT_CALLS=10
+CALL_TIMEOUT_SECONDS=300
+CALL_CHECK_INTERVAL=5
+
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FORMAT=%(asctime)s - %(name)s - %(name)s - %(levelname)s - %(message)s
+
+# Cleanup Configuration
+INQUIRY_CLEANUP_HOURS=24
+
+# Error Handling
+MAX_RETRY_ATTEMPTS=3
+RETRY_DELAY_SECONDS=5 
